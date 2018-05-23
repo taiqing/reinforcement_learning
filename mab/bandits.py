@@ -1,7 +1,10 @@
 # coding: utf-8
 
+"""
+Bernoulli Multi-Arm Bandits
+"""
+
 import numpy as np
-import time
 
 
 class Bandits(object):
@@ -21,7 +24,7 @@ class Bandits(object):
 
 
 if __name__ == '__main__':
-    thetas = [0.1, 0.9, 0.5]
+    thetas = [0.1, 0.8, 0.8]
     bandits = Bandits(thetas, 12345)
     n_arm = len(thetas)
     n_trial_per_arm = 1000
