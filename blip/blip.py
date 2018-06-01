@@ -48,16 +48,20 @@ if __name__ == '__main__':
     d_x = 5
     # number of samples
     n_x = 2000
-    true_w = np.array([-1, -1, -1, 1, 1], dtype=np.float32)
-    w_init_mean = np.array([0] * d_x, dtype=np.float32)
-    w_init_var = np.array([10.] * d_x, dtype=np.float32)
-    n_iter = 1000
+    # the last entry of w is the bias
+    true_w = np.array([-1, -1, -1, 1, 1, -2], dtype=np.float32)
+    w_init_mean = np.array([0] * (d_x + 1), dtype=np.float32)
+    w_init_var = np.array([10.] * (d_x + 1), dtype=np.float32)
+    n_iter = 4000
     beta = 1.
     probe_steps = 100
+    conv_bandwidth = 50
 
     # generate binary samples: 2d np.array
-    X = stats.bernoulli.rvs(x_prior, size=[n_x, d_x])
+    X = stats.bernoulli.rvs(x_prior, size=[n_x, d_x]).astype(np.float32)
     print 'note: {a} should be close to {p}'.format(p=x_prior, a=1.0 * X.sum() / X.size)
+    # append const ones to the data
+    X = np.concatenate([X, np.ones((n_x, 1), np.float32)], axis=1)
 
     w_mean = w_init_mean
     w_var = w_init_var
@@ -87,7 +91,7 @@ if __name__ == '__main__':
             print 'w_var: {a} -> {b}'.format(a=w_var, b=w_var_updated)
         w_mean = w_mean_updated
         w_var = w_var_updated
-    ctr = np.convolve(reward_list, np.ones(50, np.float32) / 50, mode='valid')
+    ctr = np.convolve(reward_list, np.ones(conv_bandwidth, np.float32) / conv_bandwidth, mode='valid')
     fig = plt.figure(0)
     ax = fig.add_subplot(111)
     ax.plot(ctr)
