@@ -2,6 +2,8 @@
 
 """
 Bayesian Linear Probit Model
+
+Done: reshaping the posterior to balance the exploration and exploitation
 """
 
 from scipy import stats
@@ -41,19 +43,21 @@ def f_w(t):
     return f_v(t) * (f_v(t) + t)
 
 
-# def main():
-if __name__ == '__main__':
+def main():
+# if __name__ == '__main__':
     x_prior = 0.2
     # dimension
     d_x = 5
     # number of samples
     n_x = 2000
     # the last entry of w is the bias
-    true_w = np.array([-1, -1, -1, 1, 1, -2], dtype=np.float32)
+    true_w = np.array([-1, -1, -1, 1, 1, -1], dtype=np.float32)
     w_init_mean = np.array([0] * (d_x + 1), dtype=np.float32)
     w_init_var = np.array([10.] * (d_x + 1), dtype=np.float32)
-    n_iter = 4000
+    n_iter = 1000
     beta = 1.
+    # scale the parameter variances
+    var_scaling = 1.
     probe_steps = 100
     conv_bandwidth = 50
 
@@ -68,7 +72,8 @@ if __name__ == '__main__':
     reward_list = []
     for i in xrange(n_iter):
         # sample w
-        w = sample_norm_distr(w_mean, w_var, 1)[0]
+        w = sample_norm_distr(w_mean, w_var / var_scaling, 1)[0]
+        # w = w_mean
         # rank the samples according to likelihood of click
         p = likelihood(w, X, beta)
         # action: select the sample of the highest likelihood
@@ -95,9 +100,10 @@ if __name__ == '__main__':
     fig = plt.figure(0)
     ax = fig.add_subplot(111)
     ax.plot(ctr)
+    ax.set_xlabel('iterations')
+    ax.set_ylabel('CTR')
     fig.show()
     
 
-
-# if __name__ == '__main__':
-#     main()
+if __name__ == '__main__':
+    main()
