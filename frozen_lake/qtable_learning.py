@@ -23,15 +23,15 @@ if __name__ == '__main__':
         s = env.reset()
         r_sum = 0
         for step in xrange(depth):
-            a = np.argmax(Q[s,:] + np.random.randn(1, env.action_space.n)*(1./(i+1)))
+            a = np.argmax(Q[s, :] + np.random.randn(1, env.action_space.n)*(1./(i+1)))
             s_new, r, done, _ = env.step(a)
-            Q[s,a] = (1. - lr) * Q[s,a] + lr * (r + discount * np.max(Q[s_new,:]))
+            Q[s, a] = (1. - lr) * Q[s, a] + lr * (r + discount * np.max(Q[s_new, :]))
             r_sum += r
             s = s_new
             if done:
                 break
         r_list.append(r_sum)
-        if i%100 == 0:
+        if i % 100 == 0:
             print '{i}-th episode finished'.format(i=i)
     print "score over time: {:.4f}".format(sum(r_list) / n_episodes_learn)
     print "final Q-table values"
@@ -43,7 +43,7 @@ if __name__ == '__main__':
         s = env.reset()
         r_sum = 0
         for step in xrange(depth):
-            a = np.argmax(Q[s,:])
+            a = np.argmax(Q[s, :])
             s_new, r, done, _ = env.step(a)
             s = s_new
             r_sum += r
@@ -51,4 +51,3 @@ if __name__ == '__main__':
                 break
         r_list_eval.append(r_sum)
     print "evaluation: score over time: {:.4f}".format(sum(r_list_eval) / n_episodes_eval)
-        
