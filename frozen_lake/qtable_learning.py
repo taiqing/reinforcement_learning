@@ -6,6 +6,7 @@ Solving Frozen Lake with Q-table learning
 
 import gym
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 if __name__ == '__main__':
@@ -36,6 +37,15 @@ if __name__ == '__main__':
     print "score over time: {:.4f}".format(sum(r_list) / n_episodes_learn)
     print "final Q-table values"
     print Q
+    
+    conv_bandwidth = 50
+    smoothed_r_list = np.convolve(r_list, np.ones(conv_bandwidth, np.float32) / conv_bandwidth, mode='valid')
+    fig = plt.figure(0)
+    ax = fig.add_subplot(111)
+    ax.plot(smoothed_r_list)
+    ax.set_xlabel('episodes')
+    ax.set_ylabel('smoothed reward summation')
+    fig.show()
     
     # evalute the learnt Q-table
     r_list_eval = []
