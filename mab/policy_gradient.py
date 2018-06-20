@@ -2,6 +2,8 @@
 
 """
 Solve the MAB problem with a policy gradient method
+
+THE PERFORMACE IS VERY UNSTABLE.
 """
 
 import tensorflow as tf
@@ -13,7 +15,7 @@ from bandits import Bandits
 if __name__ == '__main__':
     thetas = [0.2, 0.1, 0.3, 0.01]
     bandits = Bandits(thetas)
-    lr_init = 1e-1
+    lr = 1e-3
     total_episodes = 1000
     epsilon = 0.1
 
@@ -23,36 +25,31 @@ if __name__ == '__main__':
         name='weights',
         shape=num_bandits,
         dtype=tf.float32,
-        initializer=tf.random_normal_initializer(mean=0., stddev=0.1, dtype=tf.float32))
+        initializer=tf.constant_initializer(value=1, dtype=tf.float32))
     chosen_action = tf.argmax(weights)
-    action_proba = tf.nn.softmax(weights)
     reward_holder = tf.placeholder(dtype=tf.float32)
     action_holder = tf.placeholder(dtype=tf.int32)
-    lr_holder = tf.placeholder(dtype=tf.float32)
-    loss = -tf.log(action_proba[action_holder]) * (2*reward_holder-1)
-    update = tf.train.GradientDescentOptimizer(learning_rate=lr_holder).minimize(loss)
+    loss = -tf.log(weights[action_holder]) * (2*reward_holder-1)
+    update = tf.train.GradientDescentOptimizer(learning_rate=lr).minimize(loss)
     init = tf.global_variables_initializer()
 
     total_reward = np.zeros(num_bandits)
     total_pulls = np.zeros(num_bandits)
     with tf.Session() as sess:
         sess.run(init)
-        lr = lr_init
         for i in xrange(total_episodes):
             if np.random.rand() < epsilon:
                 action = np.random.randint(num_bandits)
             else:
                 action = sess.run(chosen_action)
             reward = bandits.reward(action)
-            sess.run(update, feed_dict={reward_holder: reward, action_holder: action, lr_holder: lr})
+            sess.run(update, feed_dict={reward_holder: reward, action_holder: action})
             total_reward[action] += reward
             total_pulls[action] += 1
             if i % 50 == 0:
                 print "> running rewards: {}".format(total_reward)
                 print ">> running pulls: {}".format(total_pulls)
                 print '>>> weights: {}'.format(sess.run(weights))
-            if i % 100 == 0:
-                lr /= 2
         final_weights = sess.run(weights)
     print 'final weights: {}'.format(final_weights)
     print "The agent thinks bandit {} is the most promising".format(np.argmax(final_weights))
