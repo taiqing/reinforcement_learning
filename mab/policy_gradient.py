@@ -13,7 +13,7 @@ from bandits import Bandits
 if __name__ == '__main__':
     thetas = [0.2, 0.1, 0.3, 0.01]
     bandits = Bandits(thetas)
-    lr_init = 1e-2
+    lr_init = 1e-1
     total_episodes = 1000
     epsilon = 0.1
 
@@ -23,12 +23,13 @@ if __name__ == '__main__':
         name='weights',
         shape=num_bandits,
         dtype=tf.float32,
-        initializer=tf.random_normal_initializer(mean=-1, stddev=0.2, dtype=tf.float32))
+        initializer=tf.random_normal_initializer(mean=0., stddev=0.1, dtype=tf.float32))
     chosen_action = tf.argmax(weights)
+    action_proba = tf.nn.softmax(weights)
     reward_holder = tf.placeholder(dtype=tf.float32)
     action_holder = tf.placeholder(dtype=tf.int32)
     lr_holder = tf.placeholder(dtype=tf.float32)
-    loss = -tf.log(tf.sigmoid(weights[action_holder])) * (2*reward_holder-1)
+    loss = -tf.log(action_proba[action_holder]) * (2*reward_holder-1)
     update = tf.train.GradientDescentOptimizer(learning_rate=lr_holder).minimize(loss)
     init = tf.global_variables_initializer()
 
@@ -47,9 +48,9 @@ if __name__ == '__main__':
             total_reward[action] += reward
             total_pulls[action] += 1
             if i % 50 == 0:
-                print "running rewards: {}".format(total_reward)
-                print "total pulls: {}".format(total_pulls)
-                print '* weights: {}'.format(sess.run(weights))
+                print "> running rewards: {}".format(total_reward)
+                print ">> running pulls: {}".format(total_pulls)
+                print '>>> weights: {}'.format(sess.run(weights))
             if i % 100 == 0:
                 lr /= 2
         final_weights = sess.run(weights)
