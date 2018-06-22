@@ -1,30 +1,26 @@
 # coding: utf-8
 
 import os
+import time
 import gym
 import numpy as np
 from gym.spaces import Box, Discrete
 import matplotlib; matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import traceback
+import pandas as pd
 
 
-# TODO: polish
-def plot_learning_curve(filename, value_dict, xlabel='step'):
-    # Plot step vs the mean(last 50 episodes' rewards)
+def plot_learning_curve(filepath, value_dict, xlabel='step'):
     fig = plt.figure(figsize=(12, 4 * len(value_dict)))
-
     for i, (key, values) in enumerate(value_dict.items()):
         ax = fig.add_subplot(len(value_dict), 1, i + 1)
         ax.plot(range(len(values)), values)
         ax.set_xlabel(xlabel)
         ax.set_ylabel(key)
         ax.grid('k--', alpha=0.6)
-
     plt.tight_layout()
-    if not os.path.exists('figs'):
-        os.makedirs('figs')
-    plt.savefig(os.path.join('figs', filename))
+    plt.savefig(filepath)
 
 
 class DiscretizedObservationWrapper(gym.ObservationWrapper):
@@ -54,11 +50,8 @@ class DiscretizedObservationWrapper(gym.ObservationWrapper):
         return self._convert_to_one_number(digits)
 
 
-# TODO: declare a base class Policy
-# todo: evaluation mode
 class QLearnPolicy(object):
     def __init__(self, env,
-                 training=True,
                  gamma=0.99,
                  alpha=0.5,
                  alpha_decay=0.998,
@@ -68,7 +61,6 @@ class QLearnPolicy(object):
         assert isinstance(env.observation_space, Discrete)
         
         self.env = env
-        self.training = training
         self.gamma = gamma
         self.alpha = alpha
         self.alpha_decay = alpha_decay
@@ -81,11 +73,11 @@ class QLearnPolicy(object):
 
         self.Q = np.zeros(shape=(self.n_states, self.n_actions), dtype=np.float32)
 
-    def act(self, state):
+    def act(self, state, training):
         """Pick best action according to Q values ~ argmax_a Q(s, a).
         Exploration is forced by epsilon-greedy.
         """
-        if self.training and self.epsilon > 0. and np.random.rand() < self.epsilon:
+        if training and self.epsilon > 0. and np.random.rand() < self.epsilon:
             return self.env.action_space.sample()
 
         # Pick the action with highest Q value
@@ -103,7 +95,7 @@ class QLearnPolicy(object):
             max_q_next = np.max(self.Q[new_state, :])
             self.Q[state, action] += self.alpha * (reward + self.gamma * max_q_next - self.Q[state, action])
 
-    def train(self, n_episodes, every_episodes=None):
+    def train(self, n_episodes, result_path='./', every_episodes=None):
         reward_history = []
         reward_averaged = []
         epsilon_drop = (self.epsilon - self.epsilon_final) / n_episodes
@@ -111,9 +103,8 @@ class QLearnPolicy(object):
         for episode in xrange(n_episodes):
             state = self.env.reset()
             reward_episode = 0.
-
             while True:
-                action = self.act(state)
+                action = self.act(state, training=True)
                 new_state, reward, done, _ = self.env.step(action)
                 try:
                     self._update_q_value(state, action, new_state, reward, done)
@@ -125,7 +116,6 @@ class QLearnPolicy(object):
                 state = new_state
                 if done:
                     break
-
             reward_history.append(reward_episode)
             reward_averaged.append(np.mean(reward_history[-50:]))
             self.alpha *= self.alpha_decay
@@ -133,15 +123,34 @@ class QLearnPolicy(object):
                 self.epsilon -= epsilon_drop
 
             if every_episodes is not None and episode % every_episodes == 0:
-                print("[episode:{e}|step:{s}] best:{b} avg:{a:.4f}|{h} alpha:{al:.4f} epsilon:{ep:.4f}".format(
+                print("[episode:{e} | step:{s}] best: {b} avg: {a:.4f}|{h} alpha: {al:.4f} epsilon: {ep:.4f}".format(
                     e=episode, s=step,
                     b=np.max(reward_history), a=np.mean(reward_history[-10:]), h=reward_history[-5:],
                     al=self.alpha, ep=self.epsilon))
-        print("[FINAL] Num. episodes: {n}, Max reward: {m}, Average reward: {a}".format(
+        print("Training completed. #episodes: {n}, Max reward: {m}, Average reward: {a}".format(
             n=len(reward_history), m=np.max(reward_history), a=np.mean(reward_history)))
-        plot_learning_curve('QLearnPolicy',
+            
+        if not os.path.exists(result_path):
+            os.makedirs(result_path)
+        fig_file = os.path.join(result_path, 'QLearnPolicy-{t}.png'.format(t=int(time.time())))
+        plot_learning_curve(fig_file,
                             {'reward': reward_history, 'reward_avg50': reward_averaged},
                             xlabel='episode')
+
+    def evaluate(self, n_episodes):
+        reward_history = []
+        for episode in xrange(n_episodes):
+            state = self.env.reset()
+            reward_episode = 0.
+            while True:
+                action = self.act(state, training=False)
+                new_state, reward, done, _ = self.env.step(action)
+                reward_episode += reward
+                state = new_state
+                if done:
+                    break
+            reward_history.append(reward_episode)
+        return reward_history
 
 
 if __name__ == '__main__':
@@ -150,6 +159,11 @@ if __name__ == '__main__':
         n_bins=8,
         low=[-2.4, -2.0, -0.42, -3.5],
         high=[2.4, 2.0, 0.42, 3.5])
+    n_episodes_train = 1000
+    n_episodes_eval = 100
 
-    policy = QLearnPolicy(env=env, training=True)
-    policy.train(n_episodes=1000, every_episodes=10)
+    policy = QLearnPolicy(env=env)
+    policy.train(n_episodes=n_episodes_train, every_episodes=10, result_path='result')
+    reward_history = policy.evaluate(n_episodes=n_episodes_eval)
+    print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))
+    print pd.Series(reward_history).describe()
