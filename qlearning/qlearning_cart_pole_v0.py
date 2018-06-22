@@ -1,5 +1,11 @@
 # coding: utf-8
 
+"""
+Solve the cart pole task with q-table learning
+Ref:
+https://lilianweng.github.io/lil-log/2018/05/05/implementing-deep-reinforcement-learning-models.html
+"""
+
 import os
 import time
 import gym
