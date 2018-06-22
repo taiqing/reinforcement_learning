@@ -40,6 +40,10 @@ class ReplayMemory:
         }
 
     def sample(self, batch_size):
+        """
+        :param batch_size:
+        :return: the value of each field is a np.array object
+        """
         assert len(self.buffer) >= batch_size
         idxs = np.random.choice(range(len(self.buffer)), size=batch_size, replace=self.replace)
         return self._reformat(idxs)

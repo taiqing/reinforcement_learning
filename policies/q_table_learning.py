@@ -14,7 +14,7 @@ from gym.spaces import Box, Discrete
 import traceback
 import pandas as pd
 
-from base import plot_learning_curve, DiscretizedObservationWrapper
+from utils import plot_learning_curve, DiscretizedObservationWrapper
 
 
 class QLearnPolicy(object):
