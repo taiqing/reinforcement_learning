@@ -20,6 +20,8 @@ from base_tf_model import BaseTFModel
 
 # TODO: add base class Policy
 # TODO: add evaluate API
+# TODO: test model saving and loading
+# TODO: test huber loss
 class DqnPolicy(BaseTFModel):
     def __init__(self, env, name,
                  result_path='./',
@@ -196,13 +198,16 @@ class DqnPolicy(BaseTFModel):
                     self.rewards: batch_data['r'],
                     self.states_next: batch_data['s_next'],
                     self.done_flags: batch_data['done']}
+
                 if self.double_q:
                     actions_next = self.sess.run(self.actions_selected_by_q, {self.states: batch_data['s_next']})
                     feed_dict.update({self.actions_next: actions_next})
+
                 _, q_val, q_target_val, loss, summ_str = self.sess.run(
                     [self.optimizer, self.q, self.q_target, self.loss, self.merged_summary], feed_dict=feed_dict)
                 self.writer.add_summary(summ_str, step)
                 self.update_target_q_net(step)
+
             self.memory.add(traj)
             reward_history.append(reward)
             reward_averaged.append(np.mean(reward_history[-10:]))
@@ -214,8 +219,9 @@ class DqnPolicy(BaseTFModel):
 
             if reward_history and every_episode and n_episode % every_episode == 0:
                 print "[episodes: {}/step: {}], best: {}, avg: {:.2f}:{}, lr: {:.4f}, eps: {:.4f}".format(
-                    n_episode, step, np.max(reward_history), np.mean(reward_history[-10:]), reward_history[-5:],
-                    lr, eps, self.memory.size)
+                    n_episode, step,
+                    np.max(reward_history), np.mean(reward_history[-10:]), reward_history[-5:],
+                    lr, eps)
         self.save_model(step=step)
         print "[training completed] episodes: {}, Max reward: {}, Average reward: {}".format(
             len(reward_history), np.max(reward_history), np.mean(reward_history))

@@ -54,7 +54,7 @@ class BaseTFModel(object):
 
     @property
     def checkpoint_dir(self):
-        ckpt_path = os.path.join(self._model_path, 'checkpoints', self.model_name)
+        ckpt_path = os.path.join(self._model_path, 'checkpoints')
         makedirs(ckpt_path)
         return ckpt_path
 
@@ -72,7 +72,7 @@ class BaseTFModel(object):
     @property
     def writer(self):
         if self._writer is None:
-            writer_path = os.path.join(self._model_path, "logs", self.model_name)
+            writer_path = os.path.join(self._model_path, "logs")
             makedirs(writer_path)
             self._writer = tf.summary.FileWriter(writer_path, self.sess.graph)
         return self._writer
