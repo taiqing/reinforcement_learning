@@ -13,8 +13,21 @@ import matplotlib.pyplot as plt
 Transition = namedtuple('Transition', ['s', 'a', 'r', 's_next', 'done'])
 
 
+def makedirs(name, exist_ok=True):
+    if exist_ok:
+        if os.path.exists(name) is False:
+            os.makedirs(name)
+    else:
+        os.makedirs(name)
+
+
 class ReplayMemory:
     def __init__(self, capacity=100000, replace=False, tuple_class=Transition):
+        """
+        :param capacity: #records in the queue
+        :param replace:
+        :param tuple_class:
+        """
         self.buffer = []
         self.capacity = capacity
         self.replace = replace

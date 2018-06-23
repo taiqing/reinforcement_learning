@@ -4,6 +4,8 @@
 import os
 import tensorflow as tf
 
+from utils import makedirs
+
 
 class BaseTFModel(object):
     """Abstract object representing an Reader model.
@@ -53,7 +55,7 @@ class BaseTFModel(object):
     @property
     def checkpoint_dir(self):
         ckpt_path = os.path.join(self._model_path, 'checkpoints', self.model_name)
-        os.makedirs(ckpt_path, exist_ok=True)
+        makedirs(ckpt_path)
         return ckpt_path
 
     @property
@@ -71,7 +73,7 @@ class BaseTFModel(object):
     def writer(self):
         if self._writer is None:
             writer_path = os.path.join(self._model_path, "logs", self.model_name)
-            os.makedirs(writer_path, exist_ok=True)
+            makedirs(writer_path)
             self._writer = tf.summary.FileWriter(writer_path, self.sess.graph)
         return self._writer
 
