@@ -20,10 +20,9 @@ from base_tf_model import BaseTFModel
 
 
 # TODO: add base class Policy
-# TODO: fix the issue of not being able to training and prediction in the same script
 class DqnPolicy(BaseTFModel):
     def __init__(self, env, name,
-                 result_path='./',
+                 model_path='./',
                  training=True,
                  gamma=0.99,
                  lr=0.001,
@@ -39,8 +38,7 @@ class DqnPolicy(BaseTFModel):
                  double_q=True,
                  dueling=True):
         self.name = name
-        self.result_path = result_path
-        self.model_path = os.path.join(self.result_path, 'model')
+        self.model_path = model_path
         BaseTFModel.__init__(self, self.name, self.model_path, saver_max_to_keep=5)
 
         self.env = env
@@ -68,7 +66,8 @@ class DqnPolicy(BaseTFModel):
         print 'action_size: {a}, state_size: {s}'.format(a=self.action_size, s=self.state_size)
 
         print 'building graph ...'
-        self.build_graph()
+        with self.graph.as_default():
+            self.build_graph()
 
     def build_graph(self):
         self.__create_q_networks()
@@ -84,7 +83,7 @@ class DqnPolicy(BaseTFModel):
         y = self.rewards + (1. - self.done_flags) * self.gamma * max_q_next_target
         self.loss = tf.reduce_mean(tf.square(pred - tf.stop_gradient(y)), name="loss_mse_train")
         self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss, name="adam")
-
+        self.init_vars = tf.global_variables_initializer()
         with tf.variable_scope('summary'):
             q_summ = []
             avg_q = tf.reduce_mean(self.q, 0)
@@ -176,7 +175,7 @@ class DqnPolicy(BaseTFModel):
         step = 0
 
         # calling the property method of BaseTFModel to start a session
-        self.sess.run(tf.global_variables_initializer())
+        self.sess.run(self.init_vars)
         self.__init_target_q_net()
 
         for n_episode in range(n_episodes):
@@ -232,7 +231,7 @@ class DqnPolicy(BaseTFModel):
         print "[training completed] episodes: {}, Max reward: {}, Average reward: {}".format(
             len(reward_history), np.max(reward_history), np.mean(reward_history))
 
-        fig_path = os.path.join(self.result_path, 'figs')
+        fig_path = os.path.join(self.model_path, 'figs')
         makedirs(fig_path)
         fig_file = os.path.join(fig_path, '{n}-{t}.png'.format(n=self.name, t=int(time.time())))
         plot_learning_curve(fig_file, {'reward': reward_history, 'reward_avg': reward_averaged}, xlabel='episode')
@@ -260,10 +259,10 @@ def main():
     env = gym.make("CartPole-v1")
     n_episodes_eval = 100
 
-    policy = DqnPolicy(env=env, name='DqnPolicy', result_path='result/DqnPolicy')
+    policy = DqnPolicy(env=env, name='DqnPolicy', model_path='result/DqnPolicy')
     policy.train(n_episodes=100)
 
-    policy2 = DqnPolicy(env=env, name='DqnPolicy_eval', result_path='result/DqnPolicy', training=False)
+    policy2 = DqnPolicy(env=env, name='DqnPolicy_eval', model_path='result/DqnPolicy', training=False)
     policy2.load_model()
     reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
     print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))

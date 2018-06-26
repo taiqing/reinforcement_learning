@@ -15,13 +15,13 @@ class BaseTFModel(object):
     """
 
     def __init__(self, model_name, model_path, saver_max_to_keep=5):
-        #TODO fix the private member variables
         self.__saver = None
         self.__saver_max_to_keep = saver_max_to_keep
         self.__writer = None
         self.__model_name = model_name
         self.__sess = None
         self.__model_path = model_path
+        self.__graph = None
 
     def scope_vars(self, scope):
         res = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope)
@@ -67,7 +67,8 @@ class BaseTFModel(object):
     @property
     def saver(self):
         if self.__saver is None:
-            self.__saver = tf.train.Saver(max_to_keep=self.__saver_max_to_keep)
+            with self.graph.as_default():
+                self.__saver = tf.train.Saver(max_to_keep=self.__saver_max_to_keep)
         return self.__saver
 
     @property
@@ -75,7 +76,8 @@ class BaseTFModel(object):
         if self.__writer is None:
             writer_path = os.path.join(self.__model_path, "logs")
             makedirs(writer_path)
-            self.__writer = tf.summary.FileWriter(writer_path, self.sess.graph)
+            with self.graph.as_default():
+                self.__writer = tf.summary.FileWriter(writer_path, self.sess.graph)
         return self.__writer
 
     @property
@@ -84,5 +86,11 @@ class BaseTFModel(object):
             config = tf.ConfigProto()
             config.intra_op_parallelism_threads = 2
             config.inter_op_parallelism_threads = 2
-            self.__sess = tf.Session(config=config)
+            self.__sess = tf.Session(config=config, graph=self.graph)
         return self.__sess
+
+    @property
+    def graph(self):
+        if self.__graph is None:
+            self.__graph = tf.Graph()
+        return self.__graph
