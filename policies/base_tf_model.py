@@ -15,12 +15,13 @@ class BaseTFModel(object):
     """
 
     def __init__(self, model_name, model_path, saver_max_to_keep=5):
-        self._saver = None
-        self._saver_max_to_keep = saver_max_to_keep
-        self._writer = None
-        self._model_name = model_name
-        self._sess = None
-        self._model_path = model_path
+        #TODO fix the private member variables
+        self.__saver = None
+        self.__saver_max_to_keep = saver_max_to_keep
+        self.__writer = None
+        self.__model_name = model_name
+        self.__sess = None
+        self.__model_path = model_path
 
     def scope_vars(self, scope):
         res = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope)
@@ -36,7 +37,7 @@ class BaseTFModel(object):
         self.saver.save(self.sess, ckpt_file, global_step=step)
 
     def load_model(self):
-        print " [*] Loading checkpoints..."
+        print " [*] Loading the latest checkpoint ..."
 
         ckpt = tf.train.get_checkpoint_state(self.checkpoint_dir)
         print(self.checkpoint_dir, ckpt)
@@ -54,34 +55,34 @@ class BaseTFModel(object):
 
     @property
     def checkpoint_dir(self):
-        ckpt_path = os.path.join(self._model_path, 'checkpoints')
+        ckpt_path = os.path.join(self.__model_path, 'checkpoints')
         makedirs(ckpt_path)
         return ckpt_path
 
     @property
     def model_name(self):
-        assert self._model_name, "Not a valid model name."
-        return self._model_name
+        assert self.__model_name, "Not a valid model name."
+        return self.__model_name
 
     @property
     def saver(self):
-        if self._saver is None:
-            self._saver = tf.train.Saver(max_to_keep=self._saver_max_to_keep)
-        return self._saver
+        if self.__saver is None:
+            self.__saver = tf.train.Saver(max_to_keep=self.__saver_max_to_keep)
+        return self.__saver
 
     @property
     def writer(self):
-        if self._writer is None:
-            writer_path = os.path.join(self._model_path, "logs")
+        if self.__writer is None:
+            writer_path = os.path.join(self.__model_path, "logs")
             makedirs(writer_path)
-            self._writer = tf.summary.FileWriter(writer_path, self.sess.graph)
-        return self._writer
+            self.__writer = tf.summary.FileWriter(writer_path, self.sess.graph)
+        return self.__writer
 
     @property
     def sess(self):
-        if self._sess is None:
+        if self.__sess is None:
             config = tf.ConfigProto()
             config.intra_op_parallelism_threads = 2
             config.inter_op_parallelism_threads = 2
-            self._sess = tf.Session(config=config)
-        return self._sess
+            self.__sess = tf.Session(config=config)
+        return self.__sess

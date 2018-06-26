@@ -12,6 +12,7 @@ import time
 import numpy as np
 import tensorflow as tf
 import gym
+import pandas as pd
 
 from utils import Transition, ReplayMemory, plot_learning_curve, makedirs
 from nets import dense_nn
@@ -19,9 +20,7 @@ from base_tf_model import BaseTFModel
 
 
 # TODO: add base class Policy
-# TODO: add evaluate API
-# TODO: test model saving and loading
-# TODO: test huber loss
+# TODO: fix the issue of not being able to training and prediction in the same script
 class DqnPolicy(BaseTFModel):
     def __init__(self, env, name,
                  result_path='./',
@@ -68,7 +67,38 @@ class DqnPolicy(BaseTFModel):
         self.state_size = np.prod(list(self.env.observation_space.shape))
         print 'action_size: {a}, state_size: {s}'.format(a=self.action_size, s=self.state_size)
 
-    def create_q_networks(self):
+        print 'building graph ...'
+        self.build_graph()
+
+    def build_graph(self):
+        self.__create_q_networks()
+
+        self.actions_selected_by_q = tf.argmax(self.q, axis=-1, name='action_selected')
+        action_one_hot = tf.one_hot(self.actions, self.action_size, dtype=tf.float32, name='action_one_hot')
+        pred = tf.reduce_sum(self.q * action_one_hot, axis=-1, name='pred')
+        if self.double_q:
+            action_next_one_hot = tf.one_hot(self.actions_next, self.action_size, dtype=tf.float32, name='action_next_one_hot')
+            max_q_next_target = tf.reduce_sum(self.q_target * action_next_one_hot, axis=-1, name='max_q_next_target')
+        else:
+            max_q_next_target = tf.reduce_max(self.q_target, axis=-1)
+        y = self.rewards + (1. - self.done_flags) * self.gamma * max_q_next_target
+        self.loss = tf.reduce_mean(tf.square(pred - tf.stop_gradient(y)), name="loss_mse_train")
+        self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss, name="adam")
+
+        with tf.variable_scope('summary'):
+            q_summ = []
+            avg_q = tf.reduce_mean(self.q, 0)
+            for idx in range(self.action_size):
+                q_summ.append(tf.summary.histogram('q/%s' % idx, avg_q[idx]))
+            self.q_summ = tf.summary.merge(q_summ, 'q_summary')
+
+            self.q_y_summ = tf.summary.histogram("batch/y", y)
+            self.q_pred_summ = tf.summary.histogram("batch/pred", pred)
+            self.loss_summ = tf.summary.scalar("loss", self.loss)
+
+            self.merged_summary = tf.summary.merge_all(key=tf.GraphKeys.SUMMARIES)
+
+    def __create_q_networks(self):
         # mini-batch
         self.states = tf.placeholder(tf.float32, shape=(None, self.state_size), name='state')
         self.states_next = tf.placeholder(tf.float32, shape=(None, self.state_size), name='state_next')
@@ -102,49 +132,22 @@ class DqnPolicy(BaseTFModel):
         self.q_target_vars = self.scope_vars('Q_target')
         assert len(self.q_vars) == len(self.q_target_vars), "Two Q-networks are not same in structure."
 
-    def build_graph(self):
-        self.create_q_networks()
-        self.actions_selected_by_q = tf.argmax(self.q, axis=-1, name='action_selected')
-        action_one_hot = tf.one_hot(self.actions, self.action_size, dtype=tf.float32, name='action_one_hot')
-        pred = tf.reduce_sum(self.q * action_one_hot, axis=-1, name='pred')
-        if self.double_q:
-            action_next_one_hot = tf.one_hot(self.actions_next, self.action_size, dtype=tf.float32, name='action_next_one_hot')
-            max_q_next_target = tf.reduce_sum(self.q_target * action_next_one_hot, axis=-1, name='max_q_next_target')
-        else:
-            max_q_next_target = tf.reduce_max(self.q_target, axis=-1)
-        y = self.rewards + (1. - self.done_flags) * self.gamma * max_q_next_target
-        self.loss = tf.reduce_mean(tf.square(pred - tf.stop_gradient(y)), name="loss_mse_train")
-        self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss, name="adam")
-
-        with tf.variable_scope('summary'):
-            q_summ = []
-            avg_q = tf.reduce_mean(self.q, 0)
-            for idx in range(self.action_size):
-                q_summ.append(tf.summary.histogram('q/%s' % idx, avg_q[idx]))
-            self.q_summ = tf.summary.merge(q_summ, 'q_summary')
-
-            self.q_y_summ = tf.summary.histogram("batch/y", y)
-            self.q_pred_summ = tf.summary.histogram("batch/pred", pred)
-            self.loss_summ = tf.summary.scalar("loss", self.loss)
-
-            self.merged_summary = tf.summary.merge_all(key=tf.GraphKeys.SUMMARIES)
-
-    def _init_target_q_net(self):
+    def __init_target_q_net(self):
         self.sess.run([v_t.assign(v) for v_t, v in zip(self.q_target_vars, self.q_vars)])
 
-    def _update_target_q_net_hard(self):
+    def __update_target_q_net_hard(self):
         self.sess.run([v_t.assign(v) for v_t, v in zip(self.q_target_vars, self.q_vars)])
 
-    def _update_target_q_net_soft(self, tau=0.05):
+    def __update_target_q_net_soft(self, tau=0.05):
         self.sess.run([v_t.assign(v_t * (1. - tau) + v * tau)
                        for v_t, v in zip(self.q_target_vars, self.q_vars)])
 
-    def update_target_q_net(self, step):
+    def __update_target_q_net(self, step):
         if self.target_update_type == 'hard':
             if step % self.target_update_every_step == 0:
-                self._update_target_q_net_hard()
+                self.__update_target_q_net_hard()
         else:
-            self._update_target_q_net_soft(self.target_update_tau)
+            self.__update_target_q_net_soft(self.target_update_tau)
 
     def act(self, state, epsilon=0.1):
         """
@@ -160,6 +163,9 @@ class DqnPolicy(BaseTFModel):
             return self.actions_selected_by_q.eval({self.states: state.reshape((1, -1))})[0]
 
     def train(self, n_episodes=500, annealing_episodes=450, every_episode=10):
+        if self.training is False:
+            raise Exception('prohibited to call train() for a non-training model')
+
         reward_history = [0.0]
         reward_averaged = []
         lr = self.lr
@@ -169,9 +175,9 @@ class DqnPolicy(BaseTFModel):
         print "eps_drop: {}".format(eps_drop)
         step = 0
 
-        self.build_graph()
+        # calling the property method of BaseTFModel to start a session
         self.sess.run(tf.global_variables_initializer())
-        self._init_target_q_net()
+        self.__init_target_q_net()
 
         for n_episode in range(n_episodes):
             ob = self.env.reset()
@@ -206,8 +212,7 @@ class DqnPolicy(BaseTFModel):
                 _, q_val, q_target_val, loss, summ_str = self.sess.run(
                     [self.optimizer, self.q, self.q_target, self.loss, self.merged_summary], feed_dict=feed_dict)
                 self.writer.add_summary(summ_str, step)
-                self.update_target_q_net(step)
-
+                self.__update_target_q_net(step)
             self.memory.add(traj)
             reward_history.append(reward)
             reward_averaged.append(np.mean(reward_history[-10:]))
@@ -222,6 +227,7 @@ class DqnPolicy(BaseTFModel):
                     n_episode, step,
                     np.max(reward_history), np.mean(reward_history[-10:]), reward_history[-5:],
                     lr, eps)
+
         self.save_model(step=step)
         print "[training completed] episodes: {}, Max reward: {}, Average reward: {}".format(
             len(reward_history), np.max(reward_history), np.mean(reward_history))
@@ -231,12 +237,38 @@ class DqnPolicy(BaseTFModel):
         fig_file = os.path.join(fig_path, '{n}-{t}.png'.format(n=self.name, t=int(time.time())))
         plot_learning_curve(fig_file, {'reward': reward_history, 'reward_avg': reward_averaged}, xlabel='episode')
 
+    def evaluate(self, n_episodes):
+        if self.training:
+            raise Exception('prohibited to call evaluate() for a training model')
 
-if __name__ == '__main__':
+        reward_history = []
+        for episode in xrange(n_episodes):
+            state = self.env.reset()
+            reward_episode = 0.
+            while True:
+                action = self.act(state)
+                new_state, reward, done, _ = self.env.step(action)
+                reward_episode += reward
+                state = new_state
+                if done:
+                    break
+            reward_history.append(reward_episode)
+        return reward_history
+
+
+def main():
     env = gym.make("CartPole-v1")
+    n_episodes_eval = 100
 
     policy = DqnPolicy(env=env, name='DqnPolicy', result_path='result/DqnPolicy')
-    policy.train()
-    # reward_history = policy.evaluate(n_episodes=n_episodes_eval)
-    # print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))
-    # print pd.Series(reward_history).describe()
+    policy.train(n_episodes=100)
+
+    policy2 = DqnPolicy(env=env, name='DqnPolicy_eval', result_path='result/DqnPolicy', training=False)
+    policy2.load_model()
+    reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
+    print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))
+    print pd.Series(reward_history).describe()
+
+
+if __name__ == '__main__':
+    main()
