@@ -13,6 +13,7 @@ import numpy as np
 import tensorflow as tf
 import gym
 import pandas as pd
+import shutil
 
 from utils import Transition, ReplayMemory, plot_learning_curve, makedirs
 from nets import dense_nn
@@ -65,6 +66,15 @@ class DqnPolicy(BaseTFModel):
         self.state_size = np.prod(list(self.env.observation_space.shape))
         print 'action_size: {a}, state_size: {s}'.format(a=self.action_size, s=self.state_size)
 
+        if self.training:
+            # clear existing model files
+            if os.path.exists(self.model_path):
+                print 'deleting existing model files at {}'.format(self.model_path)
+                if os.path.isdir(self.model_path):
+                    shutil.rmtree(self.model_path)
+                else:
+                    os.remove(self.model_path)
+
         print 'building graph ...'
         with self.graph.as_default():
             self.build_graph()
@@ -81,6 +91,7 @@ class DqnPolicy(BaseTFModel):
         else:
             max_q_next_target = tf.reduce_max(self.q_target, axis=-1)
         y = self.rewards + (1. - self.done_flags) * self.gamma * max_q_next_target
+
         self.loss = tf.reduce_mean(tf.square(pred - tf.stop_gradient(y)), name="loss_mse_train")
         self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss, name="adam")
         self.init_vars = tf.global_variables_initializer()
@@ -185,6 +196,7 @@ class DqnPolicy(BaseTFModel):
             reward = 0.
             while not done:
                 a = self.act(ob, eps)
+                assert a >= 0
                 new_ob, r, done, _ = self.env.step(a)
                 step += 1
                 reward += r
@@ -212,6 +224,7 @@ class DqnPolicy(BaseTFModel):
                     [self.optimizer, self.q, self.q_target, self.loss, self.merged_summary], feed_dict=feed_dict)
                 self.writer.add_summary(summ_str, step)
                 self.__update_target_q_net(step)
+
             self.memory.add(traj)
             reward_history.append(reward)
             reward_averaged.append(np.mean(reward_history[-10:]))
@@ -257,10 +270,11 @@ class DqnPolicy(BaseTFModel):
 
 def main():
     env = gym.make("CartPole-v1")
+    n_episodes_train = 500
     n_episodes_eval = 100
 
     policy = DqnPolicy(env=env, name='DqnPolicy', model_path='result/DqnPolicy')
-    policy.train(n_episodes=100)
+    policy.train(n_episodes=n_episodes_train)
 
     policy2 = DqnPolicy(env=env, name='DqnPolicy_eval', model_path='result/DqnPolicy', training=False)
     policy2.load_model()
