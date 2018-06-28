@@ -4,8 +4,7 @@ import tensorflow as tf
 import numpy as np
 
 
-def dense_nn(inputs, layer_sizes, name="mlp", reuse=None, 
-             dropout_keep_prob=None, batch_norm=False, training=True):
+def dense_nn(inputs, layer_sizes, name="mlp", reuse=None, dropout_keep_prob=None, batch_norm=False, training=True):
     """
     :param inputs: 
     :param layer_sizes: 

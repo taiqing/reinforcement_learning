@@ -22,7 +22,7 @@ from base_tf_model import BaseTFModel
 from utils import ReplayMemory
 
 
-Record = namedtuple('Record', ['s', 'a', 'r', 'td_target'])
+Record = namedtuple('Record', ['s', 'a', 'r', 's_next'])
 
 
 class ActorCriticPolicy(BaseTFModel):
@@ -94,11 +94,12 @@ class ActorCriticPolicy(BaseTFModel):
 
         # inputs
         self.states = tf.placeholder(tf.float32, shape=(None, self.state_size), name='state')
+        self.states_next = tf.placeholder(tf.float32, shape=(None, self.state_size), name='state_next')
         self.actions = tf.placeholder(tf.int32, shape=(None,), name='action')
         self.rewards = tf.placeholder(tf.float32, shape=(None,), name='reward')
         # todo: test calculating td_targets on-the-fly
         # r + gamma*V(s_next)
-        self.td_targets = tf.placeholder(tf.float32, shape=(None,), name='td_target')
+        # self.td_targets = tf.placeholder(tf.float32, shape=(None,), name='td_target')
 
         # actor: action probabilities
         self.actor = dense_nn(self.states, self.layer_sizes + [self.action_size], name='actor')
@@ -110,10 +111,12 @@ class ActorCriticPolicy(BaseTFModel):
         # critic: action value (Q-value)
         self.critic = dense_nn(self.states, self.layer_sizes + [1], name='critic')
         self.critic_vars = self.scope_vars('critic')
+        self.td_targets = self.rewards \
+                          + self.gamma * tf.squeeze(dense_nn(self.states_next, self.layer_sizes + [1], name='critic', reuse=True))
 
         action_ohe = tf.one_hot(self.actions, self.action_size, dtype=tf.float32, name='action_one_hot')
         self.pred_value = tf.reduce_sum(self.critic * action_ohe, axis=-1, name='q_action')
-        self.td_errors = self.td_targets - self.pred_value
+        self.td_errors = tf.stop_gradient(self.td_targets) - self.pred_value
 
         with tf.variable_scope('critic_train'):
             # self.reg_c = tf.reduce_mean([tf.nn.l2_loss(x) for x in self.critic_vars])
@@ -173,14 +176,18 @@ class ActorCriticPolicy(BaseTFModel):
                 ob_next, r, done, _ = self.env.step(a)
                 step += 1
                 episode_reward += r
-                if done:
-                    next_state_value = done_rewards or 0.0
-                else:
-                    with self.sess.as_default():
-                        next_state_value = self.critic.eval({self.states: ob_next.reshape((1, -1))})[0][0]
+                # if done:
+                #     next_state_value = done_rewards or 0.0
+                # else:
+                #     with self.sess.as_default():
+                #         next_state_value = self.critic.eval({self.states: ob_next.reshape((1, -1))})[0][0]
 
-                td_target = r + self.gamma * next_state_value
-                self.memory.add(Record(ob, a, r, td_target))
+                #@
+                if done:
+                    r = done_rewards or 0.
+
+                # td_target = r + self.gamma * next_state_value
+                self.memory.add(Record(ob, a, r, ob_next))
                 ob = ob_next
 
                 while self.memory.size >= self.batch_size:
@@ -192,7 +199,7 @@ class ActorCriticPolicy(BaseTFModel):
                             self.states: batch['s'],
                             self.actions: batch['a'],
                             self.rewards: batch['r'],
-                            self.td_targets: batch['td_target']
+                            self.states_next: batch['s_next']
                         })
                     self.writer.add_summary(summ_str, step)
             reward_history.append(episode_reward)
@@ -244,10 +251,10 @@ def main():
     n_episodes_train = 800
     n_episodes_eval = 100
 
-    policy = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', seed=1234)
+    policy = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', seed=None)
     policy.train(n_episodes=n_episodes_train, annealing_episodes=720, every_episode=10, done_rewards=-100)
 
-    policy2 = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', training=False, seed=1234)
+    policy2 = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', training=False, seed=None)
     policy2.load_model()
     reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
     print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))
