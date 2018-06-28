@@ -60,7 +60,7 @@ class ReinforcePolicy(BaseTFModel):
         with self.graph.as_default():
             if self.seed is not None:
                 np.random.seed(self.seed)
-                tf.set_random_seed(self.seed*3)
+                tf.set_random_seed(int(self.seed/3))
             self.__build_graph()
 
     def act(self, state):
