@@ -62,7 +62,6 @@ class ReinforcePolicy(BaseTFModel):
             tf.set_random_seed(self.seed*3)
             self.__build_graph()
 
-    # todo: when will the model converge (i.e. stop exploration)?
     def act(self, state):
         """
         :param state: 1d np.ndarray
@@ -81,6 +80,7 @@ class ReinforcePolicy(BaseTFModel):
 
         self.pi = dense_nn(self.states, self.layer_sizes + [self.action_size], name='pi_network')
         self.sampled_actions = tf.squeeze(tf.multinomial(self.pi, 1))
+        self.max_action_proba = tf.reduce_max(tf.nn.softmax(self.pi), axis=-1)
         self.pi_vars = self.scope_vars('pi_network')
 
         if self.baseline:
@@ -102,11 +102,14 @@ class ReinforcePolicy(BaseTFModel):
             self.optim_pi = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss_pi, name='adam_optim_pi')
 
         with tf.variable_scope('summary'):
-            self.loss_pi_summ = tf.summary.scalar('loss_pi', self.loss_pi)
-            summ_list = [self.loss_pi_summ]
+            # max_action_proba reflects the level of exploration
+            max_action_proba_summ = tf.summary.histogram("max_action_proba", self.max_action_proba)
+            mean_of_max_action_proba_summ = tf.summary.scalar("mean_of_max_action_proba", tf.reduce_mean(self.max_action_proba))
+            loss_pi_summ = tf.summary.scalar('loss_pi', self.loss_pi)
+            summ_list = [mean_of_max_action_proba_summ, max_action_proba_summ, loss_pi_summ]
             if self.baseline:
-                self.loss_v_summ = tf.summary.scalar('loss_v', self.loss_v)
-                summ_list.append(self.loss_v_summ)
+                loss_v_summ = tf.summary.scalar('loss_v', self.loss_v)
+                summ_list.append(loss_v_summ)
             self.merged_summary = tf.summary.merge(summ_list)
 
         if self.baseline:
@@ -151,7 +154,6 @@ class ReinforcePolicy(BaseTFModel):
                 returns.append(return_so_far)
             returns = returns[::-1]
 
-            # todo: decay the learning rate with Adam optimizer?
             lr *= self.lr_decay
             _, summ_str = self.sess.run(
                 [self.train_ops, self.merged_summary],
@@ -201,13 +203,14 @@ class ReinforcePolicy(BaseTFModel):
 def main():
     env = gym.make("CartPole-v1")
     env.seed(12345)
-    n_episodes_train = 800
+    baseline = True
+    n_episodes_train = 500
     n_episodes_eval = 100
 
-    policy = ReinforcePolicy(env=env, name='ReinforcePolicy', model_path='result/ReinforcePolicy', seed=1234)
+    policy = ReinforcePolicy(env=env, name='ReinforcePolicy', model_path='result/ReinforcePolicy', baseline=baseline, seed=1234)
     policy.train(n_episodes=n_episodes_train)
 
-    policy2 = ReinforcePolicy(env=env, name='ReinforcePolicy', model_path='result/ReinforcePolicy', training=False, seed=1234)
+    policy2 = ReinforcePolicy(env=env, name='ReinforcePolicy', model_path='result/ReinforcePolicy', baseline=baseline, training=False, seed=1234)
     policy2.load_model()
     reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
     print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))
