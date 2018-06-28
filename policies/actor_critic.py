@@ -84,10 +84,8 @@ class ActorCriticPolicy(BaseTFModel):
     def act(self, state, epsilon=0.1):
         if self.training and np.random.random() < epsilon:
             return self.env.action_space.sample()
-
-        proba = self.sess.run(self.actor_proba, {self.states: [state]})[0]
-        #todo: refactor
-        return max(range(self.action_size), key=lambda i: proba[i])
+        proba = self.sess.run(self.actor_proba, {self.states: state.reshape((1, -1))})[0]
+        return np.argmax(proba)
 
     def __build_graph(self):
         # c: critic, a: actor
