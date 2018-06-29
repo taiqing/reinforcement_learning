@@ -1,7 +1,7 @@
 # coding: utf-8
 
 """
-Solve the cart pole task with the Actor-Critic policy model
+Actor-Critic policy model
 Ref:
 https://lilianweng.github.io/lil-log/2018/05/05/implementing-deep-reinforcement-learning-models.html
 """
@@ -25,10 +25,13 @@ from utils import ReplayMemory
 Record = namedtuple('Record', ['s', 'a', 'r', 's_next'])
 
 
+# todo: add base class Policy
 class ActorCriticPolicy(BaseTFModel):
-    def __init__(self, env, name,
+    def __init__(self,
+                 env,
                  training,
-                 model_path='./',
+                 name=None,
+                 model_path=None,
                  gamma=0.9,
                  lr_a=0.01,
                  lr_a_decay=0.999,
@@ -40,7 +43,8 @@ class ActorCriticPolicy(BaseTFModel):
                  layer_sizes=[32],
                  grad_clip_norm=None,
                  act='bayesian',
-                 seed=None):
+                 seed=None,
+                 **kwargs):
         """
         :param env:
         :param name:
@@ -59,8 +63,14 @@ class ActorCriticPolicy(BaseTFModel):
         :param act: baysian or epsilon
         :param seed:
         """
-        self.name = name
-        self.model_path = model_path
+        if name is None:
+            self.name = self.__class__.__name__
+        else:
+            self.name = name
+        if model_path is None:
+            self.model_path = os.path.join('model', self.name)
+        else:
+            self.model_path = model_path
         self.env = env
         self.training = training
         self.gamma = gamma
@@ -194,7 +204,7 @@ class ActorCriticPolicy(BaseTFModel):
         self.train_ops = [self.train_op_a, self.train_op_c]
         self.init_vars = tf.global_variables_initializer()
 
-    def train(self, n_episodes, annealing_episodes=None, every_episode=None, done_rewards=None):
+    def train(self, n_episodes, annealing_episodes=None, every_episode=None, done_rewards=None, **kwargs):
         if self.training is False:
             raise Exception('prohibited to call train() for a non-training model')
 
@@ -277,28 +287,3 @@ class ActorCriticPolicy(BaseTFModel):
                     break
             reward_history.append(reward_episode)
         return reward_history
-
-
-def main():
-    env_name = "CartPole-v1"
-    n_episodes_train = 800
-    n_episodes_eval = 100
-    act = 'bayesian'
-
-    env = gym.make(env_name)
-    env.seed(1)
-    policy = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', act=act, training=True, seed=123)
-    policy.train(n_episodes=n_episodes_train, annealing_episodes=720, every_episode=10, done_rewards=-100)
-
-    env2 = gym.make(env_name)
-    env2.seed(11)
-    policy2 = ActorCriticPolicy(env=env2, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', act=act, training=False, seed=123)
-    policy2.load_model()
-    reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
-    print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))
-    print pd.Series(reward_history).describe()
-
-
-if __name__ == '__main__':
-    main()
-
