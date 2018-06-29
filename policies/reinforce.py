@@ -202,17 +202,19 @@ class ReinforcePolicy(BaseTFModel):
 
 
 def main():
-    env = gym.make("CartPole-v1")
-    env.seed(1)
+    env_name = "CartPole-v1"
     baseline = True
     n_episodes_train = 500
     n_episodes_eval = 100
 
+    env = gym.make(env_name)
+    env.seed(1)
     policy = ReinforcePolicy(env=env, name='ReinforcePolicy', training=True, model_path='result/ReinforcePolicy', baseline=baseline, seed=1234)
     policy.train(n_episodes=n_episodes_train)
 
-    env.seed(11)
-    policy2 = ReinforcePolicy(env=env, name='ReinforcePolicy', model_path='result/ReinforcePolicy', baseline=baseline, training=False, seed=1234)
+    env2 = gym.make(env_name)
+    env2.seed(11)
+    policy2 = ReinforcePolicy(env=env2, name='ReinforcePolicy', training=False, model_path='result/ReinforcePolicy', baseline=baseline, seed=1234)
     policy2.load_model()
     reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
     print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))
