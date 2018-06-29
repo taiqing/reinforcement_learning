@@ -125,6 +125,10 @@ class ActorCriticPolicy(BaseTFModel):
         """
         assert isinstance(state, np.ndarray) and state.ndim == 1
         return self.sess.run(self.sampled_actions, {self.states: state.reshape((1, -1))})
+        # if self.training:
+        #     return self.sess.run(self.sampled_actions, {self.states: state.reshape((1, -1))})
+        # else:
+        #     return self.sess.run(self.selected_actions, {self.states: state.reshape((1, -1))})
 
     def __build_graph(self):
         # c: critic, a: actor
@@ -141,6 +145,7 @@ class ActorCriticPolicy(BaseTFModel):
         self.actor = dense_nn(self.states, self.layer_sizes + [self.action_size], name='actor')
         # integer tensor
         self.sampled_actions = tf.squeeze(tf.multinomial(self.actor, 1))
+        self.selected_actions = tf.squeeze(tf.argmax(self.actor, axis=-1))
         self.actor_proba = tf.nn.softmax(self.actor)
         self.actor_vars = self.scope_vars('actor')
 
@@ -284,6 +289,7 @@ def main():
     policy = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', act=act, seed=123)
     policy.train(n_episodes=n_episodes_train, annealing_episodes=720, every_episode=10, done_rewards=-100)
 
+    # env.seed(101)
     policy2 = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', act=act, training=False, seed=123)
     policy2.load_model()
     reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
