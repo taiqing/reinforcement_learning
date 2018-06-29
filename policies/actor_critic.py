@@ -27,8 +27,8 @@ Record = namedtuple('Record', ['s', 'a', 'r', 's_next'])
 
 class ActorCriticPolicy(BaseTFModel):
     def __init__(self, env, name,
+                 training,
                  model_path='./',
-                 training=True,
                  gamma=0.9,
                  lr_a=0.01,
                  lr_a_decay=0.999,
@@ -124,11 +124,11 @@ class ActorCriticPolicy(BaseTFModel):
         :return:
         """
         assert isinstance(state, np.ndarray) and state.ndim == 1
-        return self.sess.run(self.sampled_actions, {self.states: state.reshape((1, -1))})
-        # if self.training:
-        #     return self.sess.run(self.sampled_actions, {self.states: state.reshape((1, -1))})
-        # else:
-        #     return self.sess.run(self.selected_actions, {self.states: state.reshape((1, -1))})
+        # return self.sess.run(self.sampled_actions, {self.states: state.reshape((1, -1))})
+        if self.training:
+            return self.sess.run(self.sampled_actions, {self.states: state.reshape((1, -1))})
+        else:
+            return self.sess.run(self.selected_actions, {self.states: state.reshape((1, -1))})
 
     def __build_graph(self):
         # c: critic, a: actor
@@ -142,7 +142,7 @@ class ActorCriticPolicy(BaseTFModel):
         self.rewards = tf.placeholder(tf.float32, shape=(None,), name='reward')
 
         # actor: action probabilities
-        self.actor = dense_nn(self.states, self.layer_sizes + [self.action_size], name='actor')
+        self.actor = dense_nn(self.states, self.layer_sizes + [self.action_size], training=self.training, name='actor')
         # integer tensor
         self.sampled_actions = tf.squeeze(tf.multinomial(self.actor, 1))
         self.selected_actions = tf.squeeze(tf.argmax(self.actor, axis=-1))
@@ -150,10 +150,10 @@ class ActorCriticPolicy(BaseTFModel):
         self.actor_vars = self.scope_vars('actor')
 
         # critic: action value (Q-value)
-        self.critic = dense_nn(self.states, self.layer_sizes + [1], name='critic')
+        self.critic = dense_nn(self.states, self.layer_sizes + [1], training=self.training, name='critic')
         self.critic_vars = self.scope_vars('critic')
         self.td_targets = self.rewards \
-                          + self.gamma * tf.squeeze(dense_nn(self.states_next, self.layer_sizes + [1], name='critic', reuse=True))
+                          + self.gamma * tf.squeeze(dense_nn(self.states_next, self.layer_sizes + [1], training=self.training, name='critic', reuse=True))
         # print the shape of td_targets
         # self.td_targets = tf.Print(self.td_targets, [tf.shape(self.td_targets)], first_n=1)
 
@@ -280,17 +280,19 @@ class ActorCriticPolicy(BaseTFModel):
 
 
 def main():
-    env = gym.make("CartPole-v1")
-    env.seed(12345)
+    env_name = "CartPole-v1"
     n_episodes_train = 800
     n_episodes_eval = 100
     act = 'bayesian'
 
-    policy = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', act=act, seed=123)
+    env = gym.make(env_name)
+    env.seed(1)
+    policy = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', act=act, training=True, seed=123)
     policy.train(n_episodes=n_episodes_train, annealing_episodes=720, every_episode=10, done_rewards=-100)
 
-    # env.seed(101)
-    policy2 = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', act=act, training=False, seed=123)
+    env2 = gym.make(env_name)
+    env2.seed(11)
+    policy2 = ActorCriticPolicy(env=env2, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', act=act, training=False, seed=123)
     policy2.load_model()
     reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
     print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))
