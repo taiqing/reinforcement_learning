@@ -20,11 +20,9 @@ from nets import dense_nn
 from base_tf_model import BaseTFModel
 
 
-# TODO: add base class Policy
 class DqnPolicy(BaseTFModel):
-    def __init__(self, env, name,
+    def __init__(self, env, name, training,
                  model_path='./',
-                 training=True,
                  gamma=0.99,
                  lr=0.001,
                  lr_decay=1.0,
@@ -273,7 +271,7 @@ def main():
     n_episodes_train = 500
     n_episodes_eval = 100
 
-    policy = DqnPolicy(env=env, name='DqnPolicy', model_path='result/DqnPolicy')
+    policy = DqnPolicy(env=env, name='DqnPolicy', model_path='result/DqnPolicy', training=True)
     policy.train(n_episodes=n_episodes_train)
 
     policy2 = DqnPolicy(env=env, name='DqnPolicy_eval', model_path='result/DqnPolicy', training=False)
