@@ -22,8 +22,8 @@ from base_tf_model import BaseTFModel
 
 class ReinforcePolicy(BaseTFModel):
     def __init__(self, env, name,
+                 training,
                  model_path='./',
-                 training=True,
                  gamma=0.99,
                  lr=0.001,
                  lr_decay=0.998,
@@ -79,14 +79,14 @@ class ReinforcePolicy(BaseTFModel):
         self.actions = tf.placeholder(tf.int32, shape=(None,), name='action')
         self.returns = tf.placeholder(tf.float32, shape=(None,), name='return')
 
-        self.pi = dense_nn(self.states, self.layer_sizes + [self.action_size], name='pi_network')
+        self.pi = dense_nn(self.states, self.layer_sizes + [self.action_size], training=self.training, name='pi_network')
         self.sampled_actions = tf.squeeze(tf.multinomial(self.pi, 1))
         self.max_action_proba = tf.reduce_max(tf.nn.softmax(self.pi), axis=-1)
         self.pi_vars = self.scope_vars('pi_network')
 
         if self.baseline:
             # state value estimation as the baseline
-            self.v = dense_nn(self.states, self.layer_sizes + [1], name='v_network')
+            self.v = dense_nn(self.states, self.layer_sizes + [1], training=self.training, name='v_network')
             # advantage
             self.target = self.returns - self.v
 
@@ -203,14 +203,15 @@ class ReinforcePolicy(BaseTFModel):
 
 def main():
     env = gym.make("CartPole-v1")
-    env.seed(12345)
+    env.seed(1)
     baseline = True
     n_episodes_train = 500
     n_episodes_eval = 100
 
-    policy = ReinforcePolicy(env=env, name='ReinforcePolicy', model_path='result/ReinforcePolicy', baseline=baseline, seed=1234)
+    policy = ReinforcePolicy(env=env, name='ReinforcePolicy', training=True, model_path='result/ReinforcePolicy', baseline=baseline, seed=1234)
     policy.train(n_episodes=n_episodes_train)
 
+    env.seed(11)
     policy2 = ReinforcePolicy(env=env, name='ReinforcePolicy', model_path='result/ReinforcePolicy', baseline=baseline, training=False, seed=1234)
     policy2.load_model()
     reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
