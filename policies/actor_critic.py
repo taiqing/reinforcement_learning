@@ -39,7 +39,26 @@ class ActorCriticPolicy(BaseTFModel):
                  batch_size=16,
                  layer_sizes=[32],
                  grad_clip_norm=None,
+                 act='bayesian',
                  seed=None):
+        """
+        :param env:
+        :param name:
+        :param model_path:
+        :param training:
+        :param gamma:
+        :param lr_a:
+        :param lr_a_decay:
+        :param lr_c:
+        :param lr_c_decay:
+        :param epsilon:
+        :param epsilon_final:
+        :param batch_size:
+        :param layer_sizes:
+        :param grad_clip_norm:
+        :param act: baysian or epsilon
+        :param seed:
+        """
         self.name = name
         self.model_path = model_path
         self.env = env
@@ -80,13 +99,32 @@ class ActorCriticPolicy(BaseTFModel):
                 tf.set_random_seed(int(self.seed/3))
             self.__build_graph()
 
-    # todo: test sampling action from pi(a|s)
-    # epsilon-greedy exploration is not effective in the case of large action spaces
-    def act(self, state, epsilon=0.1):
-        if self.training and np.random.random() < epsilon:
+        if act == 'bayesian':
+            self.act = self.act_bayesian
+        elif act == 'epsilon':
+            self.act = self.act_epsilon
+        else:
+            raise Exception('not supported act {}'.format(act))
+
+    def act_epsilon(self, state, **kwargs):
+        """
+        epsilon-greedy exploration is not effective in the case of large action spaces
+        :param state:
+        :param epsilon:
+        :return:
+        """
+        if self.training and np.random.random() < kwargs['epsilon']:
             return self.env.action_space.sample()
         proba = self.sess.run(self.actor_proba, {self.states: state.reshape((1, -1))})[0]
         return np.argmax(proba)
+
+    def act_bayesian(self, state, **kwargs):
+        """
+        :param state: 1d np.ndarray
+        :return:
+        """
+        assert isinstance(state, np.ndarray) and state.ndim == 1
+        return self.sess.run(self.sampled_actions, {self.states: state.reshape((1, -1))})
 
     def __build_graph(self):
         # c: critic, a: actor
@@ -172,7 +210,7 @@ class ActorCriticPolicy(BaseTFModel):
             episode_reward = 0.
             done = False
             while not done:
-                a = self.act(ob, eps)
+                a = self.act(ob, epsilon=eps)
                 ob_next, r, done, _ = self.env.step(a)
                 step += 1
                 episode_reward += r
@@ -203,7 +241,7 @@ class ActorCriticPolicy(BaseTFModel):
 
             if reward_history and every_episode and n_episode % every_episode == 0:
                 print(
-                    "[episodes: {}/step: {}], best: {}, avg10: {:.2f}: {}, lr:{:.4f} | {:.4f} eps: {:.4f}".format(
+                    "[episodes: {}/step: {}], best: {}, avg10: {:.2f}: {}, lr: {:.4f} | {:.4f} eps: {:.4f}".format(
                         n_episode, step, np.max(reward_history),
                         np.mean(reward_history[-10:]), reward_history[-5:],
                         lr_c, lr_a, eps
@@ -241,11 +279,12 @@ def main():
     env.seed(12345)
     n_episodes_train = 800
     n_episodes_eval = 100
+    act = 'bayesian'
 
-    policy = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', seed=123)
+    policy = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', act=act, seed=123)
     policy.train(n_episodes=n_episodes_train, annealing_episodes=720, every_episode=10, done_rewards=-100)
 
-    policy2 = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', training=False, seed=123)
+    policy2 = ActorCriticPolicy(env=env, name='ActorCriticPolicy', model_path='result/ActorCriticPolicy', act=act, training=False, seed=123)
     policy2.load_model()
     reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
     print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))
