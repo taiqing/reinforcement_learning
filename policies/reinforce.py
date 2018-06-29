@@ -21,17 +21,26 @@ from base_tf_model import BaseTFModel
 
 
 class ReinforcePolicy(BaseTFModel):
-    def __init__(self, env, name,
+    def __init__(self,
+                 env,
                  training,
-                 model_path='./',
+                 name=None,
+                 model_path=None,
                  gamma=0.99,
                  lr=0.001,
                  lr_decay=0.998,
                  layer_sizes=[32, 32],
                  baseline=True,
-                 seed=None):
-        self.name = name
-        self.model_path = model_path
+                 seed=None,
+                 **kwargs):
+        if name is None:
+            self.name = self.__class__.__name__
+        else:
+            self.name = name
+        if model_path is None:
+            self.model_path = os.path.join('model', self.name)
+        else:
+            self.model_path = model_path
         self.env = env
         self.training = training
         self.gamma = gamma
@@ -119,7 +128,7 @@ class ReinforcePolicy(BaseTFModel):
             self.train_ops = [self.optim_pi]
         self.init_vars = tf.global_variables_initializer()
 
-    def train(self, n_episodes=800, every_episode=10):
+    def train(self, n_episodes=800, every_episode=10, **kwargs):
         if self.training is False:
             raise Exception('prohibited to call train() for a non-training model')
 
@@ -201,25 +210,25 @@ class ReinforcePolicy(BaseTFModel):
         return reward_history
 
 
-def main():
-    env_name = "CartPole-v1"
-    baseline = True
-    n_episodes_train = 500
-    n_episodes_eval = 100
-
-    env = gym.make(env_name)
-    env.seed(1)
-    policy = ReinforcePolicy(env=env, name='ReinforcePolicy', training=True, model_path='result/ReinforcePolicy', baseline=baseline, seed=1234)
-    policy.train(n_episodes=n_episodes_train)
-
-    env2 = gym.make(env_name)
-    env2.seed(11)
-    policy2 = ReinforcePolicy(env=env2, name='ReinforcePolicy', training=False, model_path='result/ReinforcePolicy', baseline=baseline, seed=1234)
-    policy2.load_model()
-    reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
-    print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))
-    print pd.Series(reward_history).describe()
-
-
-if __name__ == '__main__':
-    main()
+# def main():
+#     env_name = "CartPole-v1"
+#     baseline = True
+#     n_episodes_train = 500
+#     n_episodes_eval = 100
+#
+#     env = gym.make(env_name)
+#     env.seed(1)
+#     policy = ReinforcePolicy(env=env, name='ReinforcePolicy', training=True, model_path='result/ReinforcePolicy', baseline=baseline, seed=1234)
+#     policy.train(n_episodes=n_episodes_train)
+#
+#     env2 = gym.make(env_name)
+#     env2.seed(11)
+#     policy2 = ReinforcePolicy(env=env2, name='ReinforcePolicy', training=False, model_path='result/ReinforcePolicy', baseline=baseline, seed=1234)
+#     policy2.load_model()
+#     reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
+#     print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))
+#     print pd.Series(reward_history).describe()
+#
+#
+# if __name__ == '__main__':
+#     main()

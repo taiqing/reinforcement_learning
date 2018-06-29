@@ -14,14 +14,21 @@ if __name__ == '__main__':
     env_name = "CartPole-v1"
     n_episodes_eval = 100
 
-    Policy = ActorCriticPolicy
+    # Policy = ActorCriticPolicy
+    # params = {
+    #     'n_episodes': 800,
+    #     'annealing_episodes': 720,
+    #     'every_episode': 10,
+    #     'done_rewards': -100,
+    #     'act': 'bayesian',
+    #     'seed': 123,
+    # }
+
+    Policy = ReinforcePolicy
     params = {
-        'n_episodes': 800,
-        'annealing_episodes': 720,
-        'every_episode': 10,
-        'done_rewards': -100,
-        'act': 'bayesian',
-        'seed': 123,
+        'n_episodes': 500,
+        'baseline': True,
+        'seed': 123
     }
 
     # training
