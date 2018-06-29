@@ -6,7 +6,6 @@ import gym
 
 from actor_critic import ActorCriticPolicy
 from deep_q_network import DqnPolicy
-from q_table_learning import QLearnPolicy
 from reinforce import ReinforcePolicy
 
 
@@ -24,11 +23,16 @@ if __name__ == '__main__':
     #     'seed': 123,
     # }
 
-    Policy = ReinforcePolicy
+    # Policy = ReinforcePolicy
+    # params = {
+    #     'n_episodes': 500,
+    #     'baseline': True,
+    #     'seed': 123
+    # }
+
+    Policy = DqnPolicy
     params = {
-        'n_episodes': 500,
-        'baseline': True,
-        'seed': 123
+        'n_episodes': 500
     }
 
     # training

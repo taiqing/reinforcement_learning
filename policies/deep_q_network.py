@@ -21,8 +21,11 @@ from base_tf_model import BaseTFModel
 
 
 class DqnPolicy(BaseTFModel):
-    def __init__(self, env, name, training,
-                 model_path='./',
+    def __init__(self,
+                 env,
+                 training,
+                 name=None,
+                 model_path=None,
                  gamma=0.99,
                  lr=0.001,
                  lr_decay=1.0,
@@ -35,11 +38,16 @@ class DqnPolicy(BaseTFModel):
                  target_update_type='hard',
                  target_update_params={},
                  double_q=True,
-                 dueling=True):
-        self.name = name
-        self.model_path = model_path
-        BaseTFModel.__init__(self, self.name, self.model_path, saver_max_to_keep=5)
-
+                 dueling=True,
+                 **kwargs):
+        if name is None:
+            self.name = self.__class__.__name__
+        else:
+            self.name = name
+        if model_path is None:
+            self.model_path = os.path.join('model', self.name)
+        else:
+            self.model_path = model_path
         self.env = env
         self.training = training
         self.gamma = gamma
@@ -73,11 +81,13 @@ class DqnPolicy(BaseTFModel):
                 else:
                     os.remove(self.model_path)
 
+        BaseTFModel.__init__(self, self.name, self.model_path, saver_max_to_keep=5)
+
         print 'building graph ...'
         with self.graph.as_default():
-            self.build_graph()
+            self.__build_graph()
 
-    def build_graph(self):
+    def __build_graph(self):
         self.__create_q_networks()
 
         self.actions_selected_by_q = tf.argmax(self.q, axis=-1, name='action_selected')
@@ -170,7 +180,7 @@ class DqnPolicy(BaseTFModel):
         with self.sess.as_default():
             return self.actions_selected_by_q.eval({self.states: state.reshape((1, -1))})[0]
 
-    def train(self, n_episodes=500, annealing_episodes=450, every_episode=10):
+    def train(self, n_episodes=500, annealing_episodes=450, every_episode=10, **kwargs):
         if self.training is False:
             raise Exception('prohibited to call train() for a non-training model')
 
@@ -266,20 +276,20 @@ class DqnPolicy(BaseTFModel):
         return reward_history
 
 
-def main():
-    env = gym.make("CartPole-v1")
-    n_episodes_train = 500
-    n_episodes_eval = 100
-
-    policy = DqnPolicy(env=env, name='DqnPolicy', model_path='result/DqnPolicy', training=True)
-    policy.train(n_episodes=n_episodes_train)
-
-    policy2 = DqnPolicy(env=env, name='DqnPolicy_eval', model_path='result/DqnPolicy', training=False)
-    policy2.load_model()
-    reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
-    print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))
-    print pd.Series(reward_history).describe()
-
-
-if __name__ == '__main__':
-    main()
+# def main():
+#     env = gym.make("CartPole-v1")
+#     n_episodes_train = 500
+#     n_episodes_eval = 100
+#
+#     policy = DqnPolicy(env=env, name='DqnPolicy', model_path='result/DqnPolicy', training=True)
+#     policy.train(n_episodes=n_episodes_train)
+#
+#     policy2 = DqnPolicy(env=env, name='DqnPolicy_eval', model_path='result/DqnPolicy', training=False)
+#     policy2.load_model()
+#     reward_history = policy2.evaluate(n_episodes=n_episodes_eval)
+#     print 'reward history over {e} episodes: avg: {a:.4f}'.format(e=n_episodes_eval, a=np.mean(reward_history))
+#     print pd.Series(reward_history).describe()
+#
+#
+# if __name__ == '__main__':
+#     main()

@@ -18,7 +18,8 @@ from utils import plot_learning_curve, DiscretizedObservationWrapper
 
 
 class QLearnPolicy(object):
-    def __init__(self, env,
+    def __init__(self,
+                 env,
                  gamma=0.99,
                  alpha=0.5,
                  alpha_decay=0.998,
