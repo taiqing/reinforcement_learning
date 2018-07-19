@@ -87,86 +87,6 @@ class DqnPolicy(BaseTFModel):
         with self.graph.as_default():
             self.__build_graph()
 
-    def __build_graph(self):
-        self.__create_q_networks()
-
-        self.actions_selected_by_q = tf.argmax(self.q, axis=-1, name='action_selected')
-        action_one_hot = tf.one_hot(self.actions, self.action_size, dtype=tf.float32, name='action_one_hot')
-        pred = tf.reduce_sum(self.q * action_one_hot, axis=-1, name='pred')
-        if self.double_q:
-            action_next_one_hot = tf.one_hot(self.actions_next, self.action_size, dtype=tf.float32, name='action_next_one_hot')
-            max_q_next_target = tf.reduce_sum(self.q_target * action_next_one_hot, axis=-1, name='max_q_next_target')
-        else:
-            max_q_next_target = tf.reduce_max(self.q_target, axis=-1)
-        y = self.rewards + (1. - self.done_flags) * self.gamma * max_q_next_target
-
-        self.loss = tf.reduce_mean(tf.square(pred - tf.stop_gradient(y)), name="loss_mse_train")
-        self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss, name="adam")
-        self.init_vars = tf.global_variables_initializer()
-        with tf.variable_scope('summary'):
-            q_summ = []
-            avg_q = tf.reduce_mean(self.q, 0)
-            for idx in range(self.action_size):
-                q_summ.append(tf.summary.histogram('q/%s' % idx, avg_q[idx]))
-            self.q_summ = tf.summary.merge(q_summ, 'q_summary')
-
-            self.q_y_summ = tf.summary.histogram("batch/y", y)
-            self.q_pred_summ = tf.summary.histogram("batch/pred", pred)
-            self.loss_summ = tf.summary.scalar("loss", self.loss)
-
-            self.merged_summary = tf.summary.merge_all(key=tf.GraphKeys.SUMMARIES)
-
-    def __create_q_networks(self):
-        # mini-batch
-        self.states = tf.placeholder(tf.float32, shape=(None, self.state_size), name='state')
-        self.states_next = tf.placeholder(tf.float32, shape=(None, self.state_size), name='state_next')
-        self.actions = tf.placeholder(tf.int32, shape=(None,), name='action')
-        # actions_next is not the actual actions in the next step;
-        # it is used to predict the action value in the Bellman equation.
-        self.actions_next = tf.placeholder(tf.int32, shape=(None,), name='action_next')
-        self.rewards = tf.placeholder(tf.float32, shape=(None,), name='reward')
-        self.done_flags = tf.placeholder(tf.float32, shape=(None,), name='done')
-        self.learning_rate = tf.placeholder(tf.float32, shape=None, name='learning_rate')
-
-        if self.dueling:
-            with tf.variable_scope('Q_primary'):
-                self.q_hidden = dense_nn(self.states, self.layer_sizes[:-1], name='q_hidden', training=self.training)
-                # advantage function A(s, a)
-                self.adv = dense_nn(self.q_hidden, [self.layer_sizes[-1], self.action_size], name='adv', training=self.training)
-                # state value function V(s)
-                self.v = dense_nn(self.q_hidden, [self.layer_sizes[-1], 1], name='v', training=self.training)
-                self.q = self.v + (self.adv - tf.reduce_mean(self.adv, reduction_indices=1, keep_dims=True))
-
-            with tf.variable_scope('Q_target'):
-                self.q_target_hidden = dense_nn(self.states_next, self.layer_sizes[:-1], name='q_hidden', training=self.training)
-                self.adv_target = dense_nn(self.q_target_hidden, [self.layer_sizes[-1], self.action_size], name='adv', training=self.training)
-                self.v_target = dense_nn(self.q_target_hidden, [self.layer_sizes[-1], 1], name='v', training=self.training)
-                self.q_target = self.v_target + (self.adv_target - tf.reduce_mean(self.adv_target, reduction_indices=1, keep_dims=True))
-        else:
-            self.q = dense_nn(self.states, self.layer_sizes + [self.action_size], name='Q_primary', training=self.training)
-            self.q_target = dense_nn(self.states_next, self.layer_sizes + [self.action_size], name='Q_target', training=self.training)
-
-        self.q_vars = self.scope_vars('Q_primary')
-        self.q_target_vars = self.scope_vars('Q_target')
-        assert len(self.q_vars) == len(self.q_target_vars), "Two Q-networks are not same in structure."
-
-    def __init_target_q_net(self):
-        self.sess.run([v_t.assign(v) for v_t, v in zip(self.q_target_vars, self.q_vars)])
-
-    def __update_target_q_net_hard(self):
-        self.sess.run([v_t.assign(v) for v_t, v in zip(self.q_target_vars, self.q_vars)])
-
-    def __update_target_q_net_soft(self, tau=0.05):
-        self.sess.run([v_t.assign(v_t * (1. - tau) + v * tau)
-                       for v_t, v in zip(self.q_target_vars, self.q_vars)])
-
-    def __update_target_q_net(self, step):
-        if self.target_update_type == 'hard':
-            if step % self.target_update_every_step == 0:
-                self.__update_target_q_net_hard()
-        else:
-            self.__update_target_q_net_soft(self.target_update_tau)
-
     def act(self, state, epsilon=0.1):
         """
         :param state: 1d np.ndarray
@@ -231,6 +151,8 @@ class DqnPolicy(BaseTFModel):
                 _, q_val, q_target_val, loss, summ_str = self.sess.run(
                     [self.optimizer, self.q, self.q_target, self.loss, self.merged_summary], feed_dict=feed_dict)
                 self.writer.add_summary(summ_str, step)
+
+                # update the target q net if necessary
                 self.__update_target_q_net(step)
 
             self.memory.add(traj)
@@ -274,6 +196,88 @@ class DqnPolicy(BaseTFModel):
                     break
             reward_history.append(reward_episode)
         return reward_history
+
+    def __build_graph(self):
+        self.__create_q_networks()
+
+        # q is the Q(s, a) of the behavior policy
+        self.actions_selected_by_q = tf.argmax(self.q, axis=-1, name='action_selected')
+        action_one_hot = tf.one_hot(self.actions, self.action_size, dtype=tf.float32, name='action_one_hot')
+        pred = tf.reduce_sum(self.q * action_one_hot, axis=-1, name='pred')
+        # q_target is the Q(s, a) of the target policy that is what we learning for.
+        if self.double_q:
+            action_next_one_hot = tf.one_hot(self.actions_next, self.action_size, dtype=tf.float32, name='action_next_one_hot')
+            max_q_next_target = tf.reduce_sum(self.q_target * action_next_one_hot, axis=-1, name='max_q_next_target')
+        else:
+            max_q_next_target = tf.reduce_max(self.q_target, axis=-1)
+        y = self.rewards + (1. - self.done_flags) * self.gamma * max_q_next_target
+
+        self.loss = tf.reduce_mean(tf.square(pred - tf.stop_gradient(y)), name="loss_mse_train")
+        self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss, name="adam")
+        self.init_vars = tf.global_variables_initializer()
+        with tf.variable_scope('summary'):
+            q_summ = []
+            avg_q = tf.reduce_mean(self.q, 0)
+            for idx in range(self.action_size):
+                q_summ.append(tf.summary.histogram('q/%s' % idx, avg_q[idx]))
+            self.q_summ = tf.summary.merge(q_summ, 'q_summary')
+
+            self.q_y_summ = tf.summary.histogram("batch/y", y)
+            self.q_pred_summ = tf.summary.histogram("batch/pred", pred)
+            self.loss_summ = tf.summary.scalar("loss", self.loss)
+
+            self.merged_summary = tf.summary.merge_all(key=tf.GraphKeys.SUMMARIES)
+
+    def __create_q_networks(self):
+        # mini-batch
+        self.states = tf.placeholder(tf.float32, shape=(None, self.state_size), name='state')
+        self.states_next = tf.placeholder(tf.float32, shape=(None, self.state_size), name='state_next')
+        self.actions = tf.placeholder(tf.int32, shape=(None,), name='action')
+        # actions_next is not the actual actions in the next step;
+        # it is used to predict the action value in the Bellman equation.
+        self.actions_next = tf.placeholder(tf.int32, shape=(None,), name='action_next')
+        self.rewards = tf.placeholder(tf.float32, shape=(None,), name='reward')
+        self.done_flags = tf.placeholder(tf.float32, shape=(None,), name='done')
+        self.learning_rate = tf.placeholder(tf.float32, shape=None, name='learning_rate')
+
+        if self.dueling:
+            with tf.variable_scope('Q_primary'):
+                self.q_hidden = dense_nn(self.states, self.layer_sizes[:-1], name='q_hidden', training=self.training)
+                # advantage function A(s, a)
+                self.adv = dense_nn(self.q_hidden, [self.layer_sizes[-1], self.action_size], name='adv', training=self.training)
+                # state value function V(s)
+                self.v = dense_nn(self.q_hidden, [self.layer_sizes[-1], 1], name='v', training=self.training)
+                self.q = self.v + (self.adv - tf.reduce_mean(self.adv, reduction_indices=1, keep_dims=True))
+
+            with tf.variable_scope('Q_target'):
+                self.q_target_hidden = dense_nn(self.states_next, self.layer_sizes[:-1], name='q_hidden', training=self.training)
+                self.adv_target = dense_nn(self.q_target_hidden, [self.layer_sizes[-1], self.action_size], name='adv', training=self.training)
+                self.v_target = dense_nn(self.q_target_hidden, [self.layer_sizes[-1], 1], name='v', training=self.training)
+                self.q_target = self.v_target + (self.adv_target - tf.reduce_mean(self.adv_target, reduction_indices=1, keep_dims=True))
+        else:
+            self.q = dense_nn(self.states, self.layer_sizes + [self.action_size], name='Q_primary', training=self.training)
+            self.q_target = dense_nn(self.states_next, self.layer_sizes + [self.action_size], name='Q_target', training=self.training)
+
+        self.q_vars = self.scope_vars('Q_primary')
+        self.q_target_vars = self.scope_vars('Q_target')
+        assert len(self.q_vars) == len(self.q_target_vars), "Two Q-networks are not same in structure."
+
+    def __init_target_q_net(self):
+        self.__update_target_q_net_hard()
+
+    def __update_target_q_net_hard(self):
+        self.sess.run([v_t.assign(v) for v_t, v in zip(self.q_target_vars, self.q_vars)])
+
+    def __update_target_q_net_soft(self, tau=0.05):
+        self.sess.run([v_t.assign(v_t * (1. - tau) + v * tau)
+                       for v_t, v in zip(self.q_target_vars, self.q_vars)])
+
+    def __update_target_q_net(self, step):
+        if self.target_update_type == 'hard':
+            if step % self.target_update_every_step == 0:
+                self.__update_target_q_net_hard()
+        else:
+            self.__update_target_q_net_soft(self.target_update_tau)
 
 
 # def main():
