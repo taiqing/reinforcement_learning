@@ -1,5 +1,13 @@
 # Reinforcement Learning
 
+To train and evaluate different policies, run:
+
+python eval_policies.py
+
+To test the Q-table learning policy, run:
+
+python q_table_learning.py
+
 ## References
 
 https://icml.cc/2016/tutorials/deep_rl_tutorial.pdf
